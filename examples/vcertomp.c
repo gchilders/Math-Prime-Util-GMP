@@ -1723,6 +1723,7 @@ void process_file(const char* filename, options *opts)
       if (steps[max_step]._type > 1) mpz_add_ui(steps[max_step+1].N, steps[max_step].N, 1);
       else mpz_sub_ui(steps[max_step+1].N, steps[max_step].N, 1);
       if (steps[max_step]._type > 2) mpz_sub(steps[max_step+1].N, steps[max_step+1].N, steps[max_step].W);
+      if (!mpz_divisible_p(steps[max_step+1].N, steps[max_step].S)) quit_error("Parsing", "N not divisible by S", opts);
       mpz_divexact(steps[max_step+1].N, steps[max_step+1].N, steps[max_step].S);
       max_step++;
       rvars = 0;
