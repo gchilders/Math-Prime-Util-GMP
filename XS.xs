@@ -10,12 +10,14 @@
 #include "ptypes.h"
 #include "gmp_main.h"
 #include "primality.h"
+#include "lucas_seq.h"
 #include "squfof126.h"
 #include "ecm.h"
 #include "simpqs.h"
 #include "bls75.h"
 #include "ecpp.h"
 #include "aks.h"
+#include "rootmod.h"
 #include "utility.h"
 #include "factor.h"
 #include "isaac.h"
@@ -153,13 +155,6 @@ is_pseudoprime(IN char* strn, ...)
   CODE:
     if (items < 2) croak("%s: no bases", GvNAME(CvGV(cv)));
     validate_string_number(cv,"n",strn);
-    if (strn[1] == 0) {
-      switch (strn[0]) {
-        case '2': case '3': case '5': case '7': XSRETURN_IV(1); break;
-        case '0': case '1': case '4': case '6': case '8': XSRETURN_IV(0); break;
-        default:  break; /* let 9 fall through */
-      }
-    }
     for (i = 1; i < items; i++) {
       const char* strbase = SvPV_nolen(ST(i));
       validate_string_number(cv, "base", strbase);
@@ -305,9 +300,9 @@ is_prime(IN char* strn)
       case 4: ret = proth(n); break;
       case 5: ret = is_trial_prime(n); break;
       case 6: ret = is_aks_prime(n); break;
-      case 7: ret = (_GMP_primality_bls_nm1(n, 100, 0) == 2) ? 1 : 0; break;
-      case 8: ret = (_GMP_primality_bls_np1(n, 100, 0) == 2) ? 1 : 0; break;
-      case 9: ret = (bls75_hybrid(n, 100, 0) == 2) ? 1 : 0; break;
+      case 7: ret = (BLS_primality_nm1(n, 100, 0) == 2) ? 1 : 0; break;
+      case 8: ret = (BLS_primality_np1(n, 100, 0) == 2) ? 1 : 0; break;
+      case 9: ret = (BLS_primality(n, 100, 0) == 2) ? 1 : 0; break;
       case 10:
       default:ret = (_GMP_ecpp(n, 0) == 2) ? 1 : 0; break;
     }
@@ -384,8 +379,7 @@ is_almost_prime(IN unsigned int k, IN char* strn)
   OUTPUT:
     RETVAL
 
-UV
-is_power(IN char* strn, IN UV a = 0)
+UV is_power(IN char* strn, IN UV a = 0)
   PREINIT:
     mpz_t n;
     int isneg;
@@ -401,6 +395,29 @@ is_power(IN char* strn, IN UV a = 0)
       RETVAL = (r == 1) ? 0 : r;
     }
     mpz_clear(n);
+  OUTPUT:
+    RETVAL
+
+int is_divisible(IN char* strn, IN char* strd)
+  PREINIT:
+    mpz_t n, d;
+  CODE:
+    validate_and_set_signed(cv, n, "n", strn, VSETNEG_OK);
+    validate_and_set_signed(cv, d, "d", strd, VSETNEG_OK);
+    RETVAL = !!mpz_divisible_p(n, d);
+    mpz_clear(d);  mpz_clear(n);
+  OUTPUT:
+    RETVAL
+
+int is_congruent(IN char* strn, IN char* strc, IN char* strd)
+  PREINIT:
+    mpz_t n, c, d;
+  CODE:
+    validate_and_set_signed(cv, n, "n", strn, VSETNEG_OK);
+    validate_and_set_signed(cv, c, "c", strc, VSETNEG_OK);
+    validate_and_set_signed(cv, d, "d", strd, VSETNEG_OK);
+    RETVAL = !!mpz_congruent_p(n, c, d);
+    mpz_clear(d);  mpz_clear(c);  mpz_clear(n);
   OUTPUT:
     RETVAL
 
@@ -543,7 +560,7 @@ totient(IN char* strn)
                break;
       case 6:  ramanujan_tau(res, n);  break;
       case 7:  mpz_sqrt(res, n);  break;
-      case 8:  mpz_set_ui(res, prime_power(res, n)); break;
+      case 8:  mpz_set_uv(res, prime_power(res, n)); break;
       case 9:  prime_count_lower(res, n); break;
       case 10: prime_count_upper(res, n); break;
       case 13: mpz_isaac_urandomm(res, n); break;
@@ -726,6 +743,11 @@ void powreal(IN char* strn, IN char* strx, IN UV prec = 40)
     mpf_init2(x, bits);
     if (mpf_set_str(x, strx, 10) != 0)
       croak("Not valid base-10 floating point input: %s", strx);
+    if ( (ix == 0 && mpf_sgn(n) < 0 && !mpf_integer_p(x)) ||
+         (ix == 0 && mpf_sgn(n) == 0 && mpf_sgn(x) < 0) ||
+         (ix == 1 && mpf_sgn(x) == 0) ||
+         (ix == 1 && mpf_sgn(n) < 0 && mpf_cmp_ui(x,1)!=0 && mpf_cmp_si(x,-1)!=0) )
+      XSRETURN_UNDEF;
     switch (ix) {
       case 0:  res = powreal(n, x, prec);  break;
       case 1:  res = rootreal(n, x, prec); break;
@@ -770,7 +792,7 @@ gcd(...)
     int i, negflag;
     mpz_t ret, n;
   PPCODE:
-    if (items == 0) XSRETURN_IV( (ix == 3) ? 1 : 0);
+    if (items == 0) XSRETURN_IV( (ix == 1 || ix == 3) ? 1 : 0);
     negflag = (ix <= 1) ? VSETNEG_POS : VSETNEG_OK;
     if (ix == 1 || ix == 3) {
       mpz_t* list;
@@ -872,21 +894,53 @@ moebius(IN char* strn, IN char* stro = 0)
       mpz_clear(nhi);
     }
 
-void
-lucasu(IN IV P, IN IV Q, IN char* strk)
+void lucasu(IN char* strp, IN char* strq, IN char* strk)
   ALIAS:
     lucasv = 1
+    lucasuv = 2
   PREINIT:
-    mpz_t u, v, k;
+    mpz_t u, v, p, q, k;
   PPCODE:
+    validate_and_set_signed(cv, p, "P", strp, VSETNEG_OK);
+    validate_and_set_signed(cv, q, "Q", strq, VSETNEG_OK);
     VALIDATE_AND_SET(k, strk);
-    /* We could call mpz_fib_ui / mpz_lucnum_ui when P=1,Q=-1,
-     * but it is only 10-15% faster so let's not special case. */
     mpz_init(u);  mpz_init(v);
-    lucasuv(u, v, P, Q, k);
-    XPUSH_MPZ( ((ix == 0) ? u : v) );
+    lucasuv(u, v, p, q, k);
+    switch (ix) {
+      case 0:  XPUSH_MPZ(u);  break;
+      case 1:  XPUSH_MPZ(v);  break;
+      case 2:
+      default: XPUSH_MPZ(u);  XPUSH_MPZ(v); break;
+    }
     mpz_clear(v); mpz_clear(u);
-    mpz_clear(k);
+    mpz_clear(k); mpz_clear(q); mpz_clear(p);
+
+void lucasumod(IN char* strp, IN char* strq, IN char* strk, IN char* strn)
+  ALIAS:
+    lucasvmod = 1
+    lucasuvmod = 2
+  PREINIT:
+    mpz_t u, v, t, p, q, k, n;
+  PPCODE:
+    validate_and_set_signed(cv, p, "P", strp, VSETNEG_OK);
+    validate_and_set_signed(cv, q, "Q", strq, VSETNEG_OK);
+    VALIDATE_AND_SET(k, strk);
+    VALIDATE_AND_SET(n, strn);
+    mpz_init(t);
+    if (ix == 0 || ix == 2) mpz_init(u);
+    if (ix == 1 || ix == 2) mpz_init(v);
+    switch (ix) {
+      case 0:  lucasumod(u, p, q, k, n, t);  XPUSH_MPZ(u);  break;
+      case 1:  lucasvmod(v, p, q, k, n, t);  XPUSH_MPZ(v);  break;
+      case 2:
+      default: lucasuvmod(u, v, p, q, k, n, t);
+               XPUSH_MPZ(u);  XPUSH_MPZ(v);
+               break;
+    }
+    if (ix == 0 || ix == 2) mpz_clear(u);
+    if (ix == 1 || ix == 2) mpz_clear(v);
+    mpz_clear(t);
+    mpz_clear(n); mpz_clear(k); mpz_clear(q); mpz_clear(p);
 
 int
 liouville(IN char* strn)
@@ -959,11 +1013,13 @@ invmod(IN char* stra, IN char* strb)
     subint = 14
     divint = 15
     modint = 16
-    tdivrem = 17
-    divrem = 18
-    factorialmod = 19
-    multifactorial = 20
-    faulhaber_sum = 21
+    cdivint = 17
+    tdivrem = 18
+    fdivrem = 19
+    cdivrem = 20
+    divrem = 21
+    factorialmod = 22
+    multifactorial = 23
   PREINIT:
     mpz_t a, b, t;
     int retundef;
@@ -1009,16 +1065,17 @@ invmod(IN char* stra, IN char* strb)
       case 4: znorder(a, a, b);
               if (!mpz_sgn(a)) retundef = 1;
               break;
-      case 5: retundef = !sqrtmod(a, a, b);
+      case 5: mpz_abs(b, b);
+              retundef = !sqrtmod(a, a, b);
               break;
       case 6: mpz_set_si(a, is_primitive_root(a, b, 0) );
               break;
       case 7: if (mpz_cmp_ui(b,3) < 0) croak("is_polygonal: k must be >= 3");
-              polygonal_nth(a, a, mpz_get_ui(b));
+              polygonal_nth(a, a, b);
               mpz_set_si(a, mpz_sgn(a));
               break;
       case 8: if (mpz_cmp_ui(b,3) < 0) croak("polygonal_nth: k must be >= 3");
-              polygonal_nth(a, a, mpz_get_ui(b));
+              polygonal_nth(a, a, b);
               break;
       case 9: if (mpz_sgn(b) <= 0) croak("rootint: k must be > 0");
               if (mpz_sgn(a) <  0) croak("rootint: n must be >= 0");
@@ -1026,7 +1083,7 @@ invmod(IN char* stra, IN char* strb)
               break;
       case 10:if (mpz_cmp_ui(b,2) < 0) croak("rootint: base must be > 1");
               if (mpz_sgn(a) <=  0) croak("rootint: n must be > 0");
-              mpz_set_ui(a, logint(a, mpz_get_ui(b)));
+              mpz_set_uv(a, logint(a, mpz_get_uv(b)));
               break;
       case 11:if (mpz_sgn(b) < 0) croak("powint: exponent must be >= 0");
               mpz_pow_ui(a, a, mpz_get_ui(b));
@@ -1043,11 +1100,22 @@ invmod(IN char* stra, IN char* strb)
       case 16:if (mpz_sgn(b) == 0) croak("modint: divide by zero");
               mpz_fdiv_r(a, a, b);
               break;
-      case 17:if (mpz_sgn(b) == 0) croak("tdivrem: divide by zero");
+      case 17:if (mpz_sgn(b) == 0) croak("cdivint: divide by zero");
+              mpz_cdiv_q(a, a, b);
+              break;
+      case 18:if (mpz_sgn(b) == 0) croak("tdivrem: divide by zero");
               mpz_tdiv_qr(b, a, a, b);  /* t is t-quotient, a is t-remainder */
               XPUSH_MPZ(b);
               break;
-      case 18:mpz_init_set(t, b);
+      case 19:if (mpz_sgn(b) == 0) croak("fdivrem: divide by zero");
+              mpz_fdiv_qr(b, a, a, b);  /* t is f-quotient, a is f-remainder */
+              XPUSH_MPZ(b);
+              break;
+      case 20:if (mpz_sgn(b) == 0) croak("cdivrem: divide by zero");
+              mpz_cdiv_qr(b, a, a, b);  /* t is c-quotient, a is c-remainder */
+              XPUSH_MPZ(b);
+              break;
+      case 21:mpz_init_set(t, b);
               if (mpz_sgn(b) == 0) croak("divrem: divide by zero");
               mpz_tdiv_qr(t, a, a, b);  /* t is t-quotient, a is t-remainder */
               if (mpz_sgn(a) < 0) {  /* Change from trunc to Euclidean */
@@ -1062,21 +1130,50 @@ invmod(IN char* stra, IN char* strb)
               XPUSH_MPZ(t);
               mpz_clear(t);
               break;
-      case 19:if (mpz_sgn(b) < 0) retundef = 1;
+      case 22:if (mpz_sgn(b) < 0) retundef = 1;
               else                factorialmod(a, mpz_get_ui(a), b);
               break;
-      case 20:if (mpz_sgn(a) < 0 || mpz_sgn(b) < 0) retundef = 1;
+      case 23:
+      default:if (mpz_sgn(a) < 0 || mpz_sgn(b) < 0) retundef = 1;
               else                multifactorial(a, mpz_get_ui(a), mpz_get_ui(b));
-              break;
-      case 21:
-      default:if (mpz_sgn(a) < 0 || mpz_sgn(b) < 0) croak("faulhaber_sum: negative argument");
-              faulhaber_sum(a, a, mpz_get_ui(b));
               break;
 
     }
     if (!retundef) XPUSH_MPZ(a);
     mpz_clear(b); mpz_clear(a);
     if (retundef) XSRETURN_UNDEF;
+
+int is_qr(IN char* stra, IN char* strn)
+  PREINIT:
+    mpz_t a, n;
+    int retval;
+  PPCODE:
+    validate_and_set_signed(cv, a, "a", stra, VSETNEG_OK);
+    validate_and_set_signed(cv, n, "n", strn, VSETNEG_OK);
+    retval = -1;
+    if (mpz_sgn(n) != 0) {
+      mpz_abs(n,n);
+      retval = sqrtmod(a,a,n);
+    }
+    mpz_clear(n); mpz_clear(a);
+    if (retval == -1)
+      XSRETURN_UNDEF;
+    else
+      XSRETURN_IV(retval);
+
+void powersum(IN char* stra, IN char* strb)
+  ALIAS:
+    faulhaber_sum = 1
+  PREINIT:
+    mpz_t a, b;
+  PPCODE:
+    validate_and_set_signed(cv, a, "a", stra, VSETNEG_OK);
+    validate_and_set_signed(cv, b, "b", strb, VSETNEG_OK);
+    if (mpz_sgn(a) < 0 || mpz_sgn(b) < 0) croak("powersum: negative argument");
+    if (ix == 0 || ix == 1)
+      faulhaber_sum(a, a, mpz_get_ui(b));
+    XPUSH_MPZ(a);
+    mpz_clear(b); mpz_clear(a);
 
 void
 lshiftint(IN char* strn, IN unsigned long k = 1)
@@ -1153,6 +1250,28 @@ addmod(IN char* stra, IN char* strb, IN char* strn)
     }
     XPUSH_MPZ(a);
     mpz_clear(n); mpz_clear(b); mpz_clear(a);
+
+void muladdmod(IN char* stra, IN char* strb, IN char* strc, IN char* strn)
+  ALIAS:
+    mulsubmod = 1
+  PREINIT:
+    mpz_t a, b, c, n;
+  PPCODE:
+    validate_and_set_signed(cv, a, "a", stra, VSETNEG_OK);
+    validate_and_set_signed(cv, b, "b", strb, VSETNEG_OK);
+    validate_and_set_signed(cv, c, "c", strc, VSETNEG_OK);
+    validate_and_set_signed(cv, n, "n", strn, VSETNEG_ERR);
+    if (mpz_sgn(n) <= 0) {
+      mpz_clear(n); mpz_clear(c); mpz_clear(b); mpz_clear(a);
+      XSRETURN_UNDEF;
+    }
+    mpz_mul(a,a,b);
+    if (ix == 0)  mpz_add(a, a, c);
+    else          mpz_sub(a, a, c);
+    mpz_mod(a,a,n);
+    XPUSH_MPZ(a);
+    mpz_clear(n); mpz_clear(c); mpz_clear(b); mpz_clear(a);
+
 
 int is_mersenne_prime(IN UV n)
   CODE:
@@ -1273,8 +1392,8 @@ void chinese(...)
   PPCODE:
     if (items == 0) {
       if (ix == 0)  XSRETURN_UV(0);
-      PUSHs(sv_2mortal(newSVuv( 0 )));
-      PUSHs(sv_2mortal(newSVuv( 0 )));
+      XPUSHs(sv_2mortal(newSVuv( 0 )));
+      XPUSHs(sv_2mortal(newSVuv( 0 )));
       XSRETURN(2);
     }
     mpz_init_set_ui(ret, 0);
@@ -1536,16 +1655,17 @@ trial_factor(IN char* strn, ...)
     pbrent_factor = 2
     pminus1_factor = 3
     pplus1_factor = 4
-    holf_factor = 5
-    squfof_factor = 6
-    ecm_factor = 7
-    qs_factor = 8
+    cheb_factor = 5
+    holf_factor = 6
+    squfof_factor = 7
+    ecm_factor = 8
+    qs_factor = 9
   PREINIT:
     mpz_t n;
     UV arg1, arg2, uf;
     static const UV default_arg1[] =
-      {0,   64000000,64000000,5000000,5000000,256000000,100000000,0,  0  };
-    /*Trial,Rho,     Brent,   P-1,    P+1,    HOLF,     SQUFOF,   ECM,QS */
+      {0,   64000000,64000000,5000000,5000000,0,256000000,100000000,0,  0  };
+    /*Trial,Rho,     Brent,   P-1,    P+1,    Cheb, HOLF, SQUFOF,   ECM,QS */
   PPCODE:
     VALIDATE_AND_SET(n, strn);
     {
@@ -1579,7 +1699,7 @@ trial_factor(IN char* strn, ...)
       switch (ix) {
         case 0: if (arg1 == 0) arg1 = 2147483647;
                 uf = _GMP_trial_factor(n, 2, arg1);
-                mpz_set_ui(f, uf);
+                mpz_set_uv(f, uf);
                 success = (uf > 0);
                 break;
         case 1: success = _GMP_prho_factor(n, f, 3, arg1);        break;
@@ -1588,9 +1708,10 @@ trial_factor(IN char* strn, ...)
                 success = _GMP_pminus1_factor(n, f, arg1,arg2);   break;
         case 4: if (arg2 == 0)  arg2 = arg1*10;
                 success = _GMP_pplus1_factor(n, f, 0,arg1,arg2);  break;
-        case 5: success = _GMP_holf_factor(n, f, arg1);           break;
-        case 6: success = squfof126(n, f, arg1);                  break;
-        case 7: if (arg2 == 0) arg2 = 100;
+        case 5: success = _GMP_cheb_factor(n, f, arg1,arg2);      break;
+        case 6: success = _GMP_holf_factor(n, f, arg1);           break;
+        case 7: success = squfof126(n, f, arg1);                  break;
+        case 8: if (arg2 == 0) arg2 = 100;
                 if (arg1 == 0) {
                   success =    _GMP_ECM_FACTOR(n, f,     1000, 40)
                             || _GMP_ECM_FACTOR(n, f,    10000, 40)
@@ -1601,7 +1722,7 @@ trial_factor(IN char* strn, ...)
                   success = _GMP_ECM_FACTOR(n, f, arg1, arg2);
                 }
                 break;
-        case 8:
+        case 9:
         default:{
                   mpz_t farray[66];
                   int i, nfactors;

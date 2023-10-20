@@ -14,6 +14,8 @@ WriteMakefile1(
     OBJECT       => 'prime_iterator.o ' .
                     'utility.o '        .
                     'primality.o '      .
+                    'lucas_seq.o '      .
+                    'rootmod.o '        .
                     'factor.o '         .
                     'pbrent63.o '       .
                     'squfof126.o '      .

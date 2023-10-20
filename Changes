@@ -14,7 +14,9 @@ Revision history for Perl module Math::Prime::Util::GMP
     - is_practical(n)          is n a practical number
     - is_trial_prime(n)        primality using trial division
     - is_almost_prime(k,n)     does n have exactly k prime factors
-    - submod                   (a - b) % n
+    - is_divisible(n,d)        is n exactly divisible by d
+    - is_congruent(n,c,d)      is n congruent to c mod d
+    - is_qr(a,n)               is n a quadratic residue mod n
     - prime_bigomega(n)        number of factors (with multiplicity)
     - prime_omega(n)           number of factors (distinct)
     - powerful_count(n[,k])    count of k-powerful numbers <= n
@@ -39,6 +41,17 @@ Revision history for Perl module Math::Prime::Util::GMP
     - bitxor(a,b)              bitwise xor
     - bitnot(n)                bitwise not (complement)
     - chinese2([a,m],...)      like chinese, but also returns modulo
+    - cdivint(a,b)             integer a/b quotient  (ceiling)
+    - fdivrem(a,b)             integer a/b quo + rem (floor)
+    - cdivrem(a,b)             integer a/b quo + rem (ceiling)
+    - submod(a,b,n)            (a - b) % n
+    - muladdmod(a, b, c, n)    (a * b + c) % n
+    - mulsubmod(a, b, c, n)    (a * b - c) % n
+    - lucasumod(P,Q,k,n)       modular Lucas U value
+    - lucasvmod(P,Q,k,n)       modular Lucas V value
+    - lucasuvmod(P,Q,k,n)      (U(P,Q)_k mod n, V(P,Q)_k mod n)
+    - lucasuv(P,Q,k)           Lucas sequence  (U(P,Q)_k, V(P,Q)_k)
+    - cheb_factor              Unexported, factoring smooth p-1/p+1
 
     [FIXES]
 
@@ -60,11 +73,26 @@ Revision history for Perl module Math::Prime::Util::GMP
     - lucas_sequence did not always match modded lucasu and lucasv.
       Removed some unnecessary restrictions on P and Q.
       Qk=powmod(Q,k,n) wasn't true for k=0.  Fixed.
+      Large IV P and P could overflow internally.  Fixed.
 
     - lcm(-n) now returns n instead of -n.
       znorder(a,-n) now returns znorder(a,n) instead of -n.
 
     - chinese uses absolute values of modulus.
+
+    - lcm with no arguments returns 1 rather than 0.
+
+    - sqrtmod now works with composites and uses absolute value of modulus.
+
+    - is_carmichael for 51+ digit inputs uses random bases.  Github #34.
+
+    - is_pseudoprime(k,base) was incorrect for some single digit k with
+      non-standard base.  Github #36.
+
+    - powreal and rootreal now return undef for cases where they would divide
+      by zero or have a complex result.
+
+    - polygonal_nth and is_polygonal accept large k.
 
     [PERFORMANCE]
 
@@ -73,9 +101,16 @@ Revision history for Perl module Math::Prime::Util::GMP
 
     - Add faster factorialmod code.  5-10x faster for large inputs.
 
+    - factoring with many small factors, e.g. a factorial, is much faster.
+
+    - znorder is slightly faster for general inputs, and much faster for n
+      with many factors (e.g. a factorial).  Github #38.
+
     [OTHER]
 
     - valuation(n,k) now will error if k < 2.  This follows Pari and SAGE.
+
+    - lucasu and lucasv accept bigint P and Q values.
 
 0.52 2020-06-22
 

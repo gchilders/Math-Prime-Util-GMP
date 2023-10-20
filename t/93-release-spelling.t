@@ -24,8 +24,12 @@ add_stopwords(qw/bigint bigints bignum bignums primorial
                  semiprime semiprimes coprime k-tuples
                  precalculated premultiplier multipoint
                  pseudoprime pseudoprimes compositeness
-                 p-adic tinyqs
-                 -th
+                 powersum
+                 signint cmpint cmpabsint
+                 setbit clrbit notbit tstbit
+                 bitand bitor bitxor bitnot
+                 p-adic bitwise
+                 0-th -th
                  -inf
                  von
                  PSP-2

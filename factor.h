@@ -9,9 +9,9 @@ extern void _init_factor(void);
 extern int factor(mpz_t n, mpz_t* factors[], int* exponents[]);
 extern void clear_factors(int nfactors, mpz_t* pfactors[], int* pexponents[]);
 
-extern int omega(mpz_t n);
-extern int bigomega(mpz_t n);
-extern void sigma(mpz_t res, mpz_t n, UV k);
+extern uint32_t omega(mpz_t n);
+extern uint32_t bigomega(mpz_t n);
+extern void sigma(mpz_t res, mpz_t n, unsigned long k);
 extern int moebius(mpz_t n);
 extern int liouville(mpz_t n);
 extern int is_semiprime(mpz_t n);
@@ -29,8 +29,9 @@ extern int  _GMP_pminus1_factor(mpz_t n, mpz_t f, UV B1, UV B2);
 extern int  _GMP_pplus1_factor(mpz_t n, mpz_t f, UV P0, UV B1, UV B2);
 extern int  _GMP_holf_factor(mpz_t n, mpz_t f, UV rounds);
 extern int  _GMP_squfof_factor(mpz_t n, mpz_t f, UV rounds);
+extern int  _GMP_cheb_factor(mpz_t n, mpz_t f, UV B, UV initx);
 
-extern UV   power_factor(mpz_t n, mpz_t f);
+extern unsigned long   power_factor(mpz_t n, mpz_t f);
 
 extern mpz_t* divisor_list(int* ndivisors, mpz_t n);
 

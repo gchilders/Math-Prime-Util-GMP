@@ -66,6 +66,7 @@
 #include "ecpp.h"
 #include "gmp_main.h"  /* primorial */
 #include "ecm.h"
+#include "rootmod.h"
 #include "utility.h"
 #include "prime_iterator.h"
 #include "bls75.h"
@@ -199,7 +200,7 @@ static int check_for_factor(mpz_t f, mpz_t inputn, mpz_t fmin, mpz_t n, int stag
         ecm_params params;
         ecm_init(params);
         params->method = ECM_ECM;
-        mpz_set_ui(params->B2, 10*B1);
+        mpz_set_uv(params->B2, 10*B1);
         mpz_set_ui(params->sigma, 0);
         success = ecm_factor(f, n, B1/4, params);
         ecm_clear(params);
@@ -454,7 +455,7 @@ static void select_point(mpz_t x, mpz_t y, mpz_t a, mpz_t b, mpz_t N,
       mpz_mod(Q, t, N);
     } while (mpz_jacobi(Q, N) == -1);
     /* Select Y */
-    sqrtmod_t(y, Q, N, t, t2, t3, t4);
+    sqrtmodp_t(y, Q, N, t, t2, t3, t4);
     /* TODO: if y^2 mod Ni != t, return composite */
     if (mpz_sgn(y) == 0) croak("y == 0 in point selection\n");
   }
@@ -715,8 +716,8 @@ static int ecpp_down(int i, mpz_t Ni, int facstage, int *pmaxH, int* dilist, mpz
         if (verbose)
           { printf("%*sN[%d] (%d dig) %s", i, "", i, nidigits, ptype); fflush(stdout); }
         curveresult = (nm1_success > 0)
-                    ? _GMP_primality_bls_3(Ni, q, &nm1a)
-                    : _GMP_primality_bls_15(Ni, q, &np1lp, &np1lq);
+                    ? BLS_check_T3(Ni, q, &nm1a)
+                    : BLS_check_T15(Ni, q, &np1lp, &np1lq);
         if (verbose) { printf("  %d\n", curveresult); fflush(stdout); }
         if ( ! curveresult ) { /* This ought not happen */
           if (verbose)
@@ -1067,11 +1068,11 @@ int main(int argc, char **argv)
       if (do_bpsw) {
         /* Done */
       } else if (do_nminus1) {
-        isprime = _GMP_primality_bls_nm1(n, 100, &cert);
+        isprime = BLS_primality_nm1(n, 100, &cert);
       } else if (do_nplus1) {
-        isprime = _GMP_primality_bls_np1(n, 100, &cert);
+        isprime = BLS_primality_np1(n, 100, &cert);
       } else if (do_bls75) {
-        isprime = bls75_hybrid(n, 100, &cert);
+        isprime = BLS_primality(n, 100, &cert);
       } else if (do_aks) {
         isprime = 2 * is_aks_prime(n);
         do_printcert = 0;
@@ -1086,7 +1087,7 @@ int main(int argc, char **argv)
       } else {
         if (!do_ecpp) {
           /* Quick n-1 test */
-          isprime = _GMP_primality_bls_nm1(n, 1, &cert);
+          isprime = BLS_primality_nm1(n, 1, &cert);
         }
         if (isprime == 1)
           isprime = _GMP_ecpp(n, &cert);

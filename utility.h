@@ -16,6 +16,11 @@ extern void mpz_isaac_urandomm(mpz_t rop, mpz_t n);
 extern UV irand64(int nbits);
 extern NV drand64(void);
 
+extern void mpz_set_uv(mpz_t n, UV v);
+extern void mpz_set_iv(mpz_t n, IV v);
+extern UV   mpz_get_uv(mpz_t n);
+/* TODO: cmp_uv, cmp_iv, mul_iv, mul_uv, etc. */
+
 extern UV   is_power(mpz_t n, UV a);
 extern UV   prime_power(mpz_t prime, mpz_t n);
 extern int  is_primitive_root(mpz_t a, mpz_t b, int nprime);
@@ -26,11 +31,6 @@ extern int  is_primitive_root(mpz_t a, mpz_t b, int nprime);
 
 #undef mpz_divmod
 extern int mpz_divmod(mpz_t r, mpz_t a, mpz_t b, mpz_t n, mpz_t t);
-
-/* s = sqrt(a) mod p */
-extern int sqrtmod(mpz_t s, mpz_t a, mpz_t p);
-extern int sqrtmod_t(mpz_t s, mpz_t a, mpz_t p,
-                     mpz_t t, mpz_t t2, mpz_t b, mpz_t g); /* 4 tmp variables */
 
 extern unsigned long modinverse(unsigned long a, unsigned long p);
 
@@ -43,11 +43,12 @@ extern void gcdext(mpz_t g, mpz_t s, mpz_t t, const mpz_t a, const mpz_t b);
 
 extern int chinese(mpz_t ret, mpz_t lcm, mpz_t *a, mpz_t *m, int items);
 
-extern UV mpz_order_ui(UV r, mpz_t n, UV limit);
+extern UV mpz_order_ui(unsigned long r, mpz_t n, unsigned long limit);
 
 extern void mpz_arctan(mpz_t r, unsigned long base, mpz_t pow, mpz_t t1, mpz_t t2);
 extern void mpz_arctanh(mpz_t r, unsigned long base, mpz_t pow, mpz_t t1, mpz_t t2);
 extern void mpz_product(mpz_t* A, UV a, UV b);
+extern void mpz_product_ui(mpz_t prod, unsigned long *v, unsigned long n);
 extern void mpz_veclcm(mpz_t* A, UV a, UV b);
 
 extern void poly_mod_mul(mpz_t* px, mpz_t* py, UV r, mpz_t mod, mpz_t t1, mpz_t t2, mpz_t t3);
@@ -106,7 +107,6 @@ extern void mpf_root(mpf_t rootx, mpf_t x, mpf_t n);
 extern void mpf_agm(mpf_t r, mpf_t a, mpf_t b);
 
 extern UV logint(mpz_t n, UV base);
-
 
 #if defined(FUNC_isqrt) || defined(FUNC_is_perfect_square)
 static UV isqrt(UV n) {

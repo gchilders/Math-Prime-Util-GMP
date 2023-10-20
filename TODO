@@ -106,23 +106,6 @@
   All current calls are testing primality, so don't need multiple returns.
   Changing the XS call to return multiple values might be useful.
 
-- mpu 'use bigint; $n=14299; say is_prime($n); say Math::Prime::Util::GMP::is_nplus1_prime($n)'
-  n=14299  F2=52 R2=275.  s=3,r=-37.  This passes theorem 17.
-  qi=2  p=66,q=2,d=4348
-  qi=13 p=45,q=1,d=2021
-  5543 also
-  all examples of this seem to be n+1 = 2 * [many small factors]
-
-  n = 5543 = 23*241, n+1=5544
-  n+1 = F2 * R2 = 88 * 63.  R2>1.  gcd(F2,R2)=1.
-  q_1 = 2    p=19,q=5,d=341
-  q_2 = 11   p=18,q=50,d=124
-  By Corollary 8, N is prime.
-  By Theorem 17, N is prime.
-  r2 = 63    p=11,q=29,d=5
-  By Corollary 10, N is prime
-  By Theorem 19, N is prime
-
 - zeta below -20 or so is increasingly wrong.  We should use reflection
   formula, but that requires some new functions.  The MPU interface doesn't
   even allow negative inputs at all so it isn't critical.
@@ -132,6 +115,7 @@
 - gamma, lngamma
   See http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.527.8519
   https://www.researchgate.net/publication/272039164_A_new_fast_asymptotic_series_for_the_gamma_function
+  https://arxiv.org/pdf/2301.09699.pdf
 
 - lambertw should use increasing precision.
 
@@ -162,8 +146,6 @@
   smooth_count
   rough_count
   qnr
-  rootmodp
-  rootmod
 
 - make the Bernoulli number cache incremental
 
@@ -171,15 +153,18 @@
 
 - optimize prime_omega, prime_bigomega
 
-- Add LucasV(mpz_t V, mpz_t k, mpz_t n, mpz_t P, mpz_t Q);
-  ensure optimized for Q=1 case
-
-- Refactor the lucas sequence code.
-  Compare performance, as well as with the generic V+inversion method.
-
-- Check for lucas_seq with P*P overflow 64-bit, so D might be wrong.
-
 - Rademacher partitions
+
+- overpartitions
+  https://arxiv.org/pdf/2303.15895
+
+- rootmod, rootmodp
+- allsqrtmod
+- allrootmod
+
+- znlog is needed by rootmod
+  simple rho
+  distinguished point rho
 
 =============== MUST DO BEFORE RELEASE
 
@@ -191,8 +176,12 @@
 
 - change is_{,euler,strong)_pseudoprime to use default base 2
 
-- sqrtmod(4,8) -> undef
-
 - consistant mod behavior.  n=>|n|, n=0 => undef  n=1 => 0.
 
-- add fdivrem  (ensure match with latest base package)
+- what's going on with compbit and bitcom?
+
+- is_qr faster version?  Better tests?
+
+- finish looking at all mp*_ui functions to check for UV/IV vs long use.
+
+- new trial factoring.  Also we probably want trial factor UV -> ui.

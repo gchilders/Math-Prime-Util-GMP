@@ -41,7 +41,8 @@ our @EXPORT_OK = qw(
                      is_miller_prime
                      miller_rabin_random
                      is_gaussian_prime
-                     lucas_sequence  lucasu  lucasv
+                     lucas_sequence  lucasuv  lucasu  lucasv
+                     lucasuvmod  lucasumod  lucasvmod
                      primes
                      sieve_primes
                      sieve_twin_primes
@@ -56,6 +57,7 @@ our @EXPORT_OK = qw(
                      pbrent_factor
                      pminus1_factor
                      pplus1_factor
+                     cheb_factor
                      holf_factor
                      squfof_factor
                      ecm_factor
@@ -72,12 +74,14 @@ our @EXPORT_OK = qw(
                      factorialmod
                      consecutive_integer_lcm
                      partitions bernfrac bernreal harmfrac harmreal stirling
-                     bernvec faulhaber_sum
+                     bernvec powersum faulhaber_sum
                      zeta li ei riemannr lambertw
                      addreal subreal mulreal divreal
                      logreal expreal powreal rootreal agmreal
                      gcd lcm kronecker valuation binomial gcdext hammingweight
                      invmod sqrtmod addmod submod mulmod divmod powmod
+                     is_qr
+                     muladdmod mulsubmod
                      vecsum vecprod
                      exp_mangoldt
                      liouville
@@ -86,12 +90,13 @@ our @EXPORT_OK = qw(
                      carmichael_lambda
                      prime_omega prime_bigomega
                      sqrtint rootint logint powint mulint addint subint
-                     divint modint divrem tdivrem
+                     divint modint cdivint divrem tdivrem fdivrem cdivrem
                      add1int sub1int
                      negint absint signint cmpint cmpabsint
                      lshiftint rshiftint rashiftint
-                     setbit clrbit compbit tstbit
-                     bitand bitor bitxor bitcom
+                     setbit clrbit tstbit
+                     bitand bitor bitxor
+                     is_divisible is_congruent
                      is_power is_prime_power is_semiprime is_almost_prime
                      is_square is_smooth is_rough is_powerful is_practical
                      is_carmichael is_fundamental is_totient
@@ -206,7 +211,7 @@ __END__
 
 =encoding utf8
 
-=for stopwords Möbius Deléglise Bézout s-gonal gcdext vecsum vecprod moebius totient liouville znorder znprimroot bernfrac bernreal bernvec harmfrac harmreal addreal subreal mulreal divreal logreal expreal powreal rootreal agmreal stirling zeta li ei riemannr lambertw lucasu lucasv OpenPFGW gmpy2 nonresidue chinese tuplets sqrtmod addmod submod mulmod powmod divmod superset sqrtint rootint logint powint mulint addint subint divint modint divrem tdivrem negint absint lshiftint rshiftint rashiftint todigits fromdigits urandomb urandomr
+=for stopwords Möbius Deléglise Bézout s-gonal gcdext vecsum vecprod moebius totient liouville znorder znprimroot bernfrac bernreal bernvec harmfrac harmreal addreal subreal mulreal divreal logreal expreal powreal rootreal agmreal stirling zeta li ei riemannr lambertw lucasuv lucasu lucasv lucasuvmod lucasumod lucasvmod OpenPFGW gmpy2 nonresidue chinese tuplets sqrtmod addmod submod mulmod powmod divmod muladdmod mulsubmod superset sqrtint rootint logint powint mulint addint subint divint cdivint modint divrem tdivrem fdivrem cdivrem negint absint lshiftint rshiftint rashiftint todigits fromdigits urandomb urandomr
 
 =head1 NAME
 
@@ -387,7 +392,7 @@ deterministic answer for tiny numbers (under C<2^64>).  If no
 certificate is required, LLR and Proth tests can be run, and small
 numbers (under approximately C<2^82>) can be satisfied with a
 deterministic Miller-Rabin test.  If the result is still not determined,
-a quick  BLS75 C<n-1> test is attempted, followed by ECPP.
+a quick BLS75 C<n-1> test is attempted, followed by ECPP.
 
 The time required for primes of different input sizes on a circa-2009
 workstation averages about C<3ms> for 30-digits, C<5ms> for 40-digit,
@@ -431,15 +436,23 @@ verification.  Proof types used include:
 
 Takes a positive number C<n> and one or more non-zero positive bases as input.
 Returns C<1> if the input is a probable prime to each base, C<0> if not.
-This is the simple Fermat primality test.
+This is the simple Fermat primality test, checking that C<b^(n-1) = 1 mod n>.
 Removing primes, given base 2 this produces the sequence L<OEIS A001567|http://oeis.org/A001567>.
+
+C<n=2> is always returned as a pseudoprime.  No other restrictions are used,
+so for instance, 4 is a Fermat pseudoprime base 5.
 
 =head2 is_euler_pseudoprime
 
 Takes a positive number C<n> and one or more non-zero positive bases as input.
 Returns C<1> if the input is an Euler probable prime to each base, C<0> if not.
-This is the Euler test, sometimes called the Euler-Jacobi test.
+This is the Euler test, sometimes called the Euler-Jacobi test,
+checking that C<kronecker(b,n) = b^((n-1)/2) mod n>
 Removing primes, given base 2 this produces the sequence L<OEIS A047713|http://oeis.org/A047713>.
+
+C<n=2> is always returned as an Euler-Jacobi pseudoprime.
+All other even C<n> return 0.
+All bases not coprime to C<n> will return 0.
 
 =head2 is_strong_pseudoprime
 
@@ -455,15 +468,7 @@ returned, then it is either a prime or a strong pseudoprime to all
 the given bases.  Given enough distinct bases, the chances become
 very strong that the number is actually prime.
 
-Both the input number and the bases may be big integers.  If base
-modulo n E<lt>= 1 or base modulo n = n-1, then the result will be 1.
-This allows the bases to be larger than n if desired, while still
-returning meaningful results.  For example,
-
-  is_strong_pseudoprime(367, 1101)
-
-would incorrectly return 0 if this was not done properly.  A 0 result
-should be returned only if n is composite, regardless of the base.
+Both the input number and the bases may be big integers.
 
 This is usually used in combination with other tests to make either stronger
 tests (e.g. the strong BPSW test) or deterministic results for numbers less
@@ -474,11 +479,24 @@ are some math packages that just use multiple MR tests for primality testing,
 though in the early 1990s almost all serious software switched to the
 BPSW test.
 
-Even numbers other than 2 will always return 0 (composite).  While the
-algorithm works with even input, most sources define it only on odd input.
-Returning composite for all non-2 even input makes the function match most
+C<n=2> is always returned as strong pseudoprime.
+All other even C<n> return 0 (most sources define this test for odd C<n>).
+Returning 0 for all even composite C<n> makes the function match most
 other implementations including L<Math::Primality>'s C<is_strong_pseudoprime>
 function.
+
+If base modulo n E<lt>= 1 or base modulo n = n-1, then the result will be 1.
+The test is not well defined if C<base = 0 mod n>
+(e.g. Crandall and Pomerance page 135), so we define it to return 1,
+which allows bases to be larger than n if desired while still
+returning meaningful results for all n.  For example,
+
+  is_strong_pseudoprime(367, 1101)
+
+would return 0 if this change was not made.  This is important for using
+deterministic base sets with large bases.  Note that this only matters if
+the base used is greater than or equal to C<n>.
+A 0 result will not be returned for a prime C<n>, regardless of the base.
 
 =head2 miller_rabin_random
 
@@ -727,6 +745,7 @@ Given two integers C<a> and C<b> as input, returns 0 (definitely composite),
 complex number C<a+bi> is a Guassian prime.  The L</is_prime> function is
 used internally to make the determination.
 
+
 =head2 is_miller_prime
 
   say "$n is definitely prime" if is_miller_prime($n);
@@ -746,6 +765,7 @@ the unconditional test grows quite rapidly, impractically many past about
 160 bits, and overflows a 64-bit integer at 456 bits -- sizes that are
 trivial for the unconditional APR-CL and ECPP tests.
 
+
 =head2 is_nminus1_prime
 
   say "$n is definitely prime" if is_nminus1_prime($n);
@@ -760,7 +780,17 @@ slows down rapidly.
 
 This method is most appropriate for numbers of the form C<k+1> where C<k>
 can be easily factored.
-Typically you should use L</is_provable_prime> and let it decide the method.
+
+This is a test specifically for this proof method.  The return values are:
+
+  1   We constructed a primality proof, hence C<n> is definitely prime.
+  0   We were unable to construct a proof, hence no conclusive result.
+
+An answer of 0 might be because C<n> is composite, but it could also be
+a failure to factor or find the right parameters.
+Typically you should use L</is_provable_prime> and let it decide the method
+and returns definitely prime, probably prime, or definitely composite.
+
 
 =head2 is_nplus1_prime
 
@@ -776,6 +806,17 @@ Disregarding factoring, this is slightly slower than the C<n-1> methods.
 It is most appropriate for numbers of the form C<k-1> where C<k> can be
 easily factored.
 
+This is a test specifically for this proof method.  The return values are:
+
+  1   We constructed a primality proof, hence C<n> is definitely prime.
+  0   We were unable to construct a proof, hence no conclusive result.
+
+An answer of 0 might be because C<n> is composite, but it could also be
+a failure to factor or find the right parameters.
+Typically you should use L</is_provable_prime> and let it decide the method
+and returns definitely prime, probably prime, or definitely composite.
+
+
 =head2 is_bls75_prime
 
 Takes a positive number as input, and returns 1 if the input passes one of
@@ -789,6 +830,17 @@ use one of:
 
 This is appropriate for cases where either C<n-1> or C<n+1> can be easily
 factored, or when both of them have many small factors.
+
+This is a test specifically for this proof method.  The return values are:
+
+  1   We constructed a primality proof, hence C<n> is definitely prime.
+  0   We were unable to construct a proof, hence no conclusive result.
+
+An answer of 0 might be because C<n> is composite, but it could also be
+a failure to factor or find the right parameters.
+Typically you should use L</is_provable_prime> and let it decide the method
+and returns definitely prime, probably prime, or definitely composite.
+
 
 =head2 is_ecpp_prime
 
@@ -806,7 +858,15 @@ digits.  Having a larger set will help with large numbers (a set of 2650
 is available on github in the C<xt/> directory).  A future implementation
 may include code to generate class polynomials as needed.
 
-Typically you should use L</is_provable_prime> and let it decide the method.
+This is a test specifically for this proof method.  The return values are:
+
+  1   We constructed a primality proof, hence C<n> is definitely prime.
+  0   We were unable to construct a proof, hence no conclusive result.
+
+An answer of 0 might be because C<n> is composite, but it could also be
+a failure to factor or find the right parameters.
+Typically you should use L</is_provable_prime> and let it decide the method
+and returns definitely prime, probably prime, or definitely composite.
 
 
 =head2 primes
@@ -1097,6 +1157,34 @@ the Lucas numbers (C<1,-1>).
 This corresponds to OpenPFGW's C<lucasV> function and gmpy2's C<lucasv>
 function.
 
+=head2 lucasuv
+
+Given integers C<P>, C<Q>, and the non-negative integer C<k>,
+return (C<U_k> modulo C<n>, C<V_k> modulo C<n>) for the
+Lucas sequence defined by C<P>,C<Q>.
+
+
+=head2 lucasumod
+
+Given integers C<P>, C<Q>, the non-negative integer C<k>, and the positive
+integer C<n>, computes C<U_k> modulo C<n> for the Lucas sequence defined
+by C<P>,C<Q>.
+
+=head2 lucasvmod
+
+Given integers C<P>, C<Q>, the non-negative integer C<k>, and the positive
+integer C<n>, computes C<V_k> modulo C<n> for the Lucas sequence defined
+by C<P>,C<Q>.
+
+This can be particularly efficient, especially if C<Q=1>.
+
+=head2 lucasuvmod
+
+Given integers C<P>, C<Q>, the non-negative integer C<k>, and the positive
+integer C<n>, returns (C<U_k> modulo C<n>, C<V_k> modulo C<n>) for the
+Lucas sequence defined by C<P>,C<Q>.
+
+
 =head2 lucas_sequence
 
   my($U, $V, $Qk) = lucas_sequence($n, $P, $Q, $k)
@@ -1106,6 +1194,8 @@ C<P>,C<Q>, modulo C<n>.  The modular Lucas sequence is used in a
 number of primality tests and proofs.
 
 C<k> must be non-negative, and C<n> must be greater than zero.
+C<P> and C<Q> are restricted to native signed integers.
+The newer function L</lucasuvmod> accepts bigint values.
 
 
 =head2 primorial
@@ -1191,10 +1281,12 @@ This corresponds to Mathematica's C<Subfactorial[n]> function.
 
 Given a list of integers, returns the greatest common divisor.  This is
 often used to test for L<coprimality|https://oeis.org/wiki/Coprimality>.
+An empty list will return 0.
 
 =head2 lcm
 
 Given a list of integers, returns the least common multiple.
+An empty list will return 1.
 
 =head2 gcdext
 
@@ -1213,7 +1305,7 @@ Solves a system of simultaneous congruences using the Chinese Remainder
 Theorem (with extension to non-coprime moduli).  A list of C<[a,n]> pairs
 are taken as input, each representing an equation C<x ≡ a mod |n|>.  If no
 solution exists, C<undef> is returned.  If a solution is returned, the
-modulus is equal to the lcm of all the given moduli (see L</lcm>.  In
+modulus is equal to the lcm of all the given moduli (see L</lcm>).  In
 the standard case where all values of C<n> are coprime, this is just the
 product.  The C<n> values must be non-zero integers, while the C<a> values
 are integers.
@@ -1223,7 +1315,7 @@ are integers.
 Functions like L</chinese> but returns two items: the remainder and the
 modulus.
 If a solution exists, the second value (the final modulus) is equal to
-the lcm of all the absolute values of all the given moduli.
+the lcm of the absolute values of all the given moduli.
 
 If no solution exists, both return values will be C<undef>.
 
@@ -1238,7 +1330,7 @@ Returns the product of all arguments, each of which must be an integer.
 =head2 kronecker
 
 Returns the Kronecker symbol C<(a|n)> for two integers.  The possible
-return values with their meanings for odd positive C<n> are:
+return values with their meanings for odd prime C<n> are:
 
    0   a = 0 mod n
    1   a is a quadratic residue modulo n (a = x^2 mod n for some x)
@@ -1250,6 +1342,10 @@ The Jacobi symbol is itself an extension of the Legendre symbol, which is
 only defined for odd prime values of C<n>.  This corresponds to Pari's
 C<kronecker(a,n)> function and Mathematica's C<KroneckerSymbol[n,m]>
 function.
+
+If C<n> is not an odd prime, then the result does not necessarily
+indicate whether C<a> is a quadratic residue mod C<n>.  Using the function
+L</is_qr> will return correct results for any C<n>, though could be slower.
 
 =head2 binomial
 
@@ -1298,13 +1394,17 @@ The implementation computes C<sinh(n)>, then C<e^x> from that.
 
 =head2 powreal
 
-Returns C<n^x> for the inputs C<n> and C<x>.
+Returns C<x^n> for the inputs C<x> and C<n>.
 An optional third argument indicates the number of significant digits
 (default 40) with the result rounded.
 
 Like L</logreal> and L</expreal>, this is a basic math function that is
 not available from the GMP library but implemented in MPFR.  Since the
 latter is not always available, this can be useful to have.
+
+A negative C<x> with non-integer C<n> will return undef as the result is
+complex.  C<x=0> with negative C<n> will also return undef as this is
+dividing by zero.
 
 =head2 rootreal
 
@@ -1314,6 +1414,9 @@ An optional third argument indicates the number of significant digits
 
 This is just C<powreal(x^(1/n)>, but allows C<n> to be easily specified
 in full precision.
+
+Asking for the 0-th root will return undef, as will negative C<x> with
+roots other than 1 or -1.
 
 =head2 agmreal
 
@@ -1356,7 +1459,7 @@ reference containing the numerator and denominator.
 
 This will be faster than calling bernfrac for each value.  The computed
 values are stored in a cache (not incremental), so later calls to to
-L</bernfrac>, L</bernreal>, L</bernvec>, and L</faulhaber_sum> with
+L</bernfrac>, L</bernreal>, L</bernvec>, and L</powersum> with
 an C<n> in the range will be substantially faster.
 
 When called in void context this just calculates and caches the values.
@@ -1579,9 +1682,11 @@ or between C<lo> and C<hi> (two arguments).  The values are inclusive.
 By convention, 1 is included even though L</is_prime_power(1) = 0>.
 This is L<OEIS series A025528|http://oeis.org/A025528>.
 
+=head2 powersum
+
 =head2 faulhaber_sum
 
-  say faulhaber_sum(111,18);
+  say powersum(111,18);
   # 41588295196841906092077874022002239896
 
 Given C<n> and C<p>, returns the sum of the C<p>-th powers of the first C<n>
@@ -1594,8 +1699,10 @@ should be called in void context first.
 
 Additionally, because the cache is used, this is not thread safe in general.
 L</bernvec> should be called once on a single thread, then future calls to
-C<faulhaber_sum> and the other functions can be safely done on multiple
+C<powersum> and the other functions can be safely done on multiple
 threads if and only if within that range.
+
+C<powersum> and C<faulhaber_sum> are aliases for the same function.
 
 =head2 sigma
 
@@ -1626,14 +1733,27 @@ and Pari's C<ramanujantau> function.
 
   say "$n is divisible by 2 ", valuation($n,2), " times.";
 
-Given integers C<n> and C<k>, returns the numbers of times C<n> is divisible
+Given integers C<n> and C<k>, returns the numbers of times C<|n|> is divisible
 by C<k>.  This is a very limited version of the algebraic valuation -- here
 it is just applied to integers.
 
 C<k> must be greater than 1.
-C<|n| is used, C<|n| = 0> returns undef, and C<|n| = 1> returns zero.
+C<|n| = 0> returns undef, and C<|n| = 1> returns zero.
 
 This corresponds to Pari and SAGE's C<valuation> function.
+
+=head2 is_qr
+
+Given two integers C<a> and C<n>, returns 1 if C<a> is a
+quadratic residue modulo C<|n|>, and 0 otherwise.
+A return value of 1 indicates there exists an C<x> where C<a = x^2 mod |n|>.
+
+For odd primes, this is similar to checking C<a==0 || kronecker(a,n) == 1>.
+
+For all values, this will be equal to C<sqrtmod(a,n) != undef>, with
+possibly better performance.
+
+If C<n = 0> the function returns undef.
 
 =head2 hammingweight
 
@@ -1669,17 +1789,14 @@ multiplied by C<a> equals C<1> modulo C<n>.
 
 =head2 sqrtmod
 
-Given two integers C<a> and C<p>, return the square root of C<a> mod C<p>.
+Given two integers C<a> and C<n>, return the square root of C<a> mod C<|n|>.
 If no square root exists, undef is returned.  If defined, the return value
-C<s> will always satisfy C<mulmod(s,s,p) = a>.
+C<r> will always satisfy C<r^2 = a mod |n|>.
 
-If C<p> is not a prime, it is possible no result will be returned even
-though a modular root exists.
-
-Only one root is returned, even though there are at least two.  In the
-case of C<p> a prime and a return value C<s>, then both C<+s mod n> and
-C<-s mod n> are roots.  The least C<s> will be returned.  In the case of
-composites, many roots may exist, but only one will be returned.
+If the modulus is prime, the function will always return C<r>, the smaller
+of the two square roots (the other being C<-r mod |n|>.  If the modulus is
+composite, one of possibly many square roots will be returned, and it will
+not necessarily be the smallest.
 
 =head2 addmod
 
@@ -1715,6 +1832,15 @@ Given three integers C<a>, C<b>, and C<n> where C<n> is positive,
 return C<(a/b) mod n>.  This is done as C<(a * (1/b mod n)) mod n>.  If
 no inverse of C<b> mod C<n> exists then undef if returned.
 
+=head2 muladdmod
+
+Given four integers C<a>, C<b>, C<c>, and C<n> where C<n> is positive,
+return C<(a*b+c) mod n>.
+
+=head2 mulsubmod
+
+Given four integers C<a>, C<b>, C<c>, and C<n> where C<n> is positive,
+return C<(a*b-c) mod n>.
 
 =head2 consecutive_integer_lcm
 
@@ -1871,6 +1997,21 @@ The result is identical to C<scalar(factor_exp($n))>.
 This corresponds to Pari's C<omega> function
 and Mathematica's C<PrimeNu[n]> function.
 
+=head2 is_divisible
+
+Given integers C<n> and C<d>, returns 1 if C<n> is exactly divisible by C<d>,
+and 0 otherwise.
+
+This corresponds to the GMP function C<mpz_divisible_p>.
+This includes its semantics with C<d=0> which returns 0 unless C<n=0>.
+
+=head2 is_congruent
+
+Given integers C<n>, C<c>, and C<d>, returns 1 if C<n> is congruent to C<c>
+modulo C<d>, and 0 otherwise.
+
+This corresponds to the GMP function C<mpz_congruent_p>.
+This includes its semantics with C<d=0> which returns 0 unless C<n=c>.
 
 =head2 is_power
 
@@ -1950,6 +2091,12 @@ the remainder has the same sign as the divisor C<b>.
 This is the same as modern L<Math::BigInt/bdiv> and the GMP C<fdiv> functions,
 but not the same as Pari/GP's C<\\> operator.
 
+=head2 cdivint
+
+Given integers C<a> and C<b>, returns the quotient C<a / b> when using
+ceiling division.  The quotient is rounded up towards +infinity and the
+remainder will have the opposite sign as the divisor C<b>.
+
 =head2 modint
 
 Given integers C<a> and C<b>, returns the modulo C<a % b>.
@@ -1979,6 +2126,16 @@ the truncated quotient and the truncated remainder.
 
 The resulting pair will match
 L<Math::BigInt/btdiv> and L<Math::BigInt/btmod>.
+
+=head2 fdivrem
+
+Given integers C<a> and C<b>, returns a list of two items:
+the floor quotient and the floor remainder.
+
+=head2 cdivrem
+
+Given integers C<a> and C<b>, returns a list of two items:
+the ceiling quotient and the ceiling remainder.
 
 =head2 lshiftint
 
@@ -2071,6 +2228,10 @@ Given integers C<a> and C<b>, return bitwise C<a AND b>.
 =head2 bitor
 
 Given integers C<a> and C<b>, return bitwise C<a OR b>.
+
+=head2 bitxor
+
+Given integers C<a> and C<b>, return bitwise C<a XOR b>.
 
 =head2 bitnot
 
@@ -2233,6 +2394,16 @@ the smoothness limit B1 for the first stage.
 Factoring will stop when the input is a prime, one factor has been found,
 or the algorithm fails to find a factor with the given smoothness.
 
+
+=head2 cheb_factor
+
+  my @factors = cheb_factor($n);
+  my @factors = cheb_factor($n, 1_000);          # set B1 smoothness
+
+Given a positive number input, tries to discover a factor using properties
+of Chebyshev polynomials (particularly that C<T_mn(x) = T_m(T_n(x))>)
+and their relationship with the Lucas sequence.
+This works when C<p-1> or C<p+1> is smooth.
 
 
 =head2 holf_factor
@@ -2559,7 +2730,7 @@ preprint, Jan 2003.  L<http://cr.yp.to/papers/aks.pdf>
 
 Dana Jacobsen E<lt>dana@acm.orgE<gt>
 
-Jason Papadopoulos wrote the tinyqs code which is basically unchanged.
+Jason Papadopoulos wrote the C<tinyqs> code which is basically unchanged.
 William Hart wrote SIMPQS which is the basis for the QS code.
 
 
@@ -2590,7 +2761,7 @@ ECM implementation, as well as the many papers by Brent and Montgomery.
 
 =head1 COPYRIGHT
 
-Copyright 2011-2021 by Dana Jacobsen E<lt>dana@acm.orgE<gt>
+Copyright 2011-2023 by Dana Jacobsen E<lt>dana@acm.orgE<gt>
 
 This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 
