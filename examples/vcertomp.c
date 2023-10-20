@@ -847,7 +847,9 @@ void verify_ecpp(step *s, options *opts) {
   mpz_add_ui(s->T1, s->T1, 1);
   mpz_mul(s->T1, s->T1, s->T1);
   if (mpz_cmp(s->Q, s->T1) <= 0)    quit_invalid("ECPP", "Q > (N^(1/4)+1)^2", s, opts);
-  if (mpz_cmp(s->Q, s->N) >= 0)     quit_invalid("ECPP", "Q < N", s, opts);
+  /* Q > N is allowed although should be very rare
+   * if (mpz_cmp(s->Q, s->N) >= 0)     quit_invalid("ECPP", "Q < N", s, opts);
+   */
   /* While M = Q is odd to compute in a proof, it is allowed.
    * In Primo terms, this means S=1 is allowed.
    *   if (mpz_cmp(s->M, s->Q) == 0)     quit_invalid("ECPP", "M != Q", s, opts);
